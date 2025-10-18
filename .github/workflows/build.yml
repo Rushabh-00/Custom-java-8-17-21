@@ -13,7 +13,7 @@ jobs:
         version: [8, 17, 21]
         arch: ["aarch32", "aarch64"]
       fail-fast: false
-      # THE FIX: max-parallel has been removed as requested.
+      # max-parallel has been removed as requested
 
     name: "Build Java ${{ matrix.version }} for Android ${{matrix.arch}}"
     runs-on: ubuntu-latest
@@ -22,21 +22,35 @@ jobs:
       - name: Checkout Your Repository (with patches)
         uses: actions/checkout@v4
 
-#      - name: Free up disk space
-#        run: |
-#          sudo rm -rf /usr/share/dotnet
- #         sudo rm -rf /opt/ghc
- #         sudo rm -rf "/usr/local/share/boost"
- #         sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
-      - name: Set up Correct Boot JDK
+      # --- THE DEFINITIVE FIX: SET UP THE CORRECT BOOT JDK FOR EACH JOB ---
+      - name: Set up Boot JDK for Java 8
+        if: matrix.version == 8
         uses: actions/setup-java@v4
         with:
-          # THE FIX: Dynamically set the Boot JDK to match the version we are building.
-          # For the Java 8 job, this will be '8'. For 17, it's '17', etc.
-          java-version: ${{ matrix.version }}
-          # Use a distribution that provides all these versions.
-          distribution: 'temurin'
+          java-version: 8
+          distribution: temurin
+
+      - name: Set up Boot JDK for Java 17
+        if: matrix.version == 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up Boot JDK for Java 21
+        if: matrix.version == 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+      # --- END OF FIX ---
 
       - name: Install build dependencies
         run: |
@@ -74,10 +88,13 @@ jobs:
       - name: Rename and prepare artifacts
         run: |
           mkdir release-assets
+          # Java 8
           find artifacts/jre-8-aarch32 -name "*.tar.xz" -exec mv {} release-assets/8-arm32.tar.xz \;
           find artifacts/jre-8-aarch64 -name "*.tar.xz" -exec mv {} release-assets/8-arm64.tar.xz \;
+          # Java 17
           find artifacts/jre-17-aarch32 -name "*.tar.xz" -exec mv {} release-assets/17-arm32.tar.xz \;
           find artifacts/jre-17-aarch64 -name "*.tar.xz" -exec mv {} release-assets/17-arm64.tar.xz \;
+          # Java 21
           find artifacts/jre-21-aarch32 -name "*.tar.xz" -exec mv {} release-assets/21-arm32.tar.xz \;
           find artifacts/jre-21-aarch64 -name "*.tar.xz" -exec mv {} release-assets/21-arm64.tar.xz \;
           echo "Prepared release assets:"
