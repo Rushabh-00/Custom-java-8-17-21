@@ -1,4 +1,4 @@
-name: Build Custom Server JREs from Local Patches
+name: Build java
 
 on:
   workflow_dispatch: # Allows you to run this manually from the Actions tab
@@ -24,12 +24,12 @@ jobs:
       - name: Checkout Your Repository (with patches)
         uses: actions/checkout@v4
 
-     # - name: Free up disk space
-      #  run: |
-        #  sudo rm -rf /usr/share/dotnet
-        #  sudo rm -rf /opt/ghc
-       #   sudo rm -rf "/usr/local/share/boost"
-       #   sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
       - name: Set up Boot JDK (Java 17)
         uses: actions/setup-java@v4
