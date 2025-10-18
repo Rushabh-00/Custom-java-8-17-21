@@ -37,7 +37,7 @@ CONFIGURE_FLAGS=(
   --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/aarch64"
   --with-debug-level=release
   --disable-precompiled-headers
-  --with-cups-include=$CUPS_DIR
+ # --with-cups-include=$CUPS_DIR
 )
 
 # --- THE DEFINITIVE FIX: EXPLICIT HEADLESS FLAGS FOR EACH VERSION ---
