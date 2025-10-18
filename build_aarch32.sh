@@ -35,7 +35,8 @@ bash ./configure \
     --with-extra-cflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp" \
     --with-extra-cxxflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp" \
     --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/arm" \
-    --disable-headful # THE CRITICAL FIX: Disables AWT (X11) and sound (ALSA)
+    --disable-x11
+    --disable-alsa
 
 make images
 
