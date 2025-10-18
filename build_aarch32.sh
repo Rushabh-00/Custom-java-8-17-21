@@ -8,15 +8,12 @@ cd openjdk
 
 echo "Applying patches for Java $TARGET_VERSION..."
 git reset --hard
-
+# Use '|| true' to ignore expected, non-fatal patch errors
 if [ "$TARGET_VERSION" == "8" ]; then
-    # Apply Java 8 specific patches, ignoring expected "failures"
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_aarch32.diff || true
-elif [ "$TARGET_VERSION" == "17" ]; then
-    find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
-elif [ "$TARGET_VERSION" == "21" ]; then
-    find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
+elif [ "$TARGET_VERSION" -ge 17 ]; then
+    find ../patches/Jre_${TARGET_VERSION} -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 fi
 
 echo "Setting up NDK toolchain for aarch32..."
@@ -26,16 +23,33 @@ export CXX="$TOOLCHAIN_PATH/bin/armv7a-linux-androideabi26-clang++"
 SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
 
 echo "Configuring build for Java $TARGET_VERSION on aarch32..."
-bash ./configure \
-    --openjdk-target=arm-linux-androideabi \
-    --with-jvm-variants=server \
-    --with-boot-jdk=$JAVA_HOME \
-    --with-toolchain-type=clang \
-    --with-sysroot=$SYSROOT_PATH \
-    --with-extra-cflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp" \
-    --with-extra-cxxflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp" \
-    --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/arm" \
-    --enable-headless-only=yes
+
+# --- THE DEFINITIVE FIX: CONDITIONAL HEADLESS FLAGS ---
+# Base configure flags for a server build
+CONFIGURE_FLAGS=(
+  --openjdk-target=arm-linux-androideabi
+  --with-jvm-variants=server
+  --with-boot-jdk=$JAVA_HOME
+  --with-toolchain-type=clang
+  --with-sysroot=$SYSROOT_PATH
+  --with-extra-cflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp"
+  --with-extra-cxxflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp"
+  --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/arm"
+  --with-debug-level=release
+  --disable-precompiled-headers
+  --disable-warnings-as-errors
+)
+
+# Add the correct headless flag based on the Java version
+if [ "$TARGET_VERSION" == "8" ]; then
+  CONFIGURE_FLAGS+=(--disable-headful)
+elif [ "$TARGET_VERSION" -ge 17 ]; then
+  CONFIGURE_FLAGS+=(--enable-headless-only=yes)
+fi
+# --- END OF FIX ---
+
+# Run configure with all flags
+bash ./configure "${CONFIGURE_FLAGS[@]}"
 
 make images
 
