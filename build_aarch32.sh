@@ -8,11 +8,14 @@ cd openjdk
 
 echo "Applying patches for Java $TARGET_VERSION..."
 git reset --hard
+# Use '|| true' to ignore expected, non-fatal patch errors
 if [ "$TARGET_VERSION" == "8" ]; then
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_aarch32.diff || true
-elif [ "$TARGET_VERSION" -ge 17 ]; then
-    find ../patches/Jre_${TARGET_VERSION} -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
+elif [ "$TARGET_VERSION" == "17" ]; then
+    find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
+elif [ "$TARGET_VERSION" == "21" ]; then
+    find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 fi
 
 echo "Setting up NDK toolchain for aarch32..."
@@ -36,15 +39,18 @@ CONFIGURE_FLAGS=(
   --with-debug-level=release
   --disable-precompiled-headers
   --disable-warnings-as-errors
-  --without-cups # THE NEW OPTIMIZATION
+  --without-cups
 )
 
-# Add the correct headless flag based on the Java version
+# --- THE DEFINITIVE FIX: EXPLICIT HEADLESS FLAGS FOR EACH VERSION ---
 if [ "$TARGET_VERSION" == "8" ]; then
   CONFIGURE_FLAGS+=(--disable-headful)
-elif [ "$TARGET_VERSION" -ge 17 ]; then
+elif [ "$TARGET_VERSION" == "17" ]; then
+  CONFIGURE_FLAGS+=(--enable-headless-only=yes)
+elif [ "$TARGET_VERSION" == "21" ]; then
   CONFIGURE_FLAGS+=(--enable-headless-only=yes)
 fi
+# --- END OF FIX ---
 
 # Run configure with all flags
 bash ./configure "${CONFIGURE_FLAGS[@]}"
