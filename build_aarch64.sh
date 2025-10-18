@@ -1,15 +1,13 @@
 #!/bin/bash
 set -e
 
-# This script builds for 64-bit ARM (arm64-v8a)
-
-# Get Source Code
+# Get Source Code and move into its directory
 bash get_source.sh $TARGET_VERSION
-cd openjdk
 
-# --- THE CRITICAL FIX: USE THE CORRECT PATH TO YOUR PATCHES ---
+# THE FIX: The 'cd openjdk' line is REMOVED from here,
+# because get_source.sh now handles it.
+
 echo "Applying patches for Java $TARGET_VERSION..."
-# Use the correct path 'patches/Jre_VERSION'
 git apply ../patches/Jre_${TARGET_VERSION}/*.diff
 
 # Configure the build
