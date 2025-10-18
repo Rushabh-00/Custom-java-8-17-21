@@ -13,9 +13,12 @@ jobs:
         version: [8, 17, 21]
         arch: ["aarch32", "aarch64"]
       fail-fast: false
+      # THE FIX, PART 1: Limit parallel jobs to reduce runner demand.
+      max-parallel: 2
 
     name: "Build Java ${{ matrix.version }} for Android ${{matrix.arch}}"
-    runs-on: ubuntu-22-04
+    # THE FIX, PART 2: Use the most common runner label.
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Your Repository (with patches)
@@ -48,10 +51,8 @@ jobs:
       - name: Build the Patched JRE
         run: |
           export TARGET_VERSION=${{ matrix.version }}
-          # Run our own local build script
           bash "build_${{ matrix.arch }}.sh"
         env:
-          # Pass the NDK path to the build script
           NDK_PATH: ${{ env.NDK_PATH }}
 
       - name: Upload JRE artifact
@@ -62,7 +63,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-22-04
+    runs-on: ubuntu-latest # Also update this for consistency
     steps:
       - name: Download all JRE artifacts
         uses: actions/download-artifact@v4
@@ -87,7 +88,7 @@ jobs:
       - name: Upload to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
-          repository: ${{ github.repository }} # Upload to YOUR repository
+          repository: ${{ github.repository }}
           tag: custom-server-jres
           release_name: "Custom Server JREs"
           body: "JREs 8, 17, and 21 for arm32 and arm64, built with local patches for headless server use on Android."
