@@ -1,43 +1,58 @@
-name: Build Custom Server JREs
+name: Build Custom Server JREs from Local Patches
 
 on:
   workflow_dispatch: # Allows you to run this manually from the Actions tab
 
 permissions:
-  contents: write # This is required to create a GitHub Release
+  contents: write # Required to create/update the GitHub Release
 
 jobs:
   build:
     strategy:
       matrix:
-        # We will build all 6 versions
         version: [8, 17, 21]
         arch: ["aarch32", "aarch64"]
       fail-fast: false
 
     name: "Build Java ${{ matrix.version }} for Android ${{matrix.arch}}"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22-04
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Your Repository (with patches)
         uses: actions/checkout@v4
 
-      - name: Set up Boot JDK
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Set up Boot JDK (Java 17)
         uses: actions/setup-java@v4
         with:
-          # Use a stable JDK to build the new one
           java-version: 17
           distribution: temurin
 
       - name: Install build dependencies
         run: |
-          sudo apt update
-          sudo apt -y install autoconf build-essential python3 python-is-python3 unzip zip systemtap-sdt-dev gcc-multilib g++-multilib libxtst-dev libasound2-dev libelf-dev libfontconfig1-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxt-dev
+          sudo apt-get update
+          sudo apt-get -y install autoconf build-essential git python3 python-is-python3 unzip zip systemtap-sdt-dev gcc-multilib g++-multilib libxtst-dev libasound2-dev libelf-dev libfontconfig1-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxt-dev
 
-      - name: Build the JRE
+      - name: Download and Set up Android NDK
+        run: |
+          wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+          unzip -q android-ndk-r25c-linux.zip
+          echo "NDK_PATH=$GITHUB_WORKSPACE/android-ndk-r25c" >> $GITHUB_ENV
+
+      - name: Build the Patched JRE
         run: |
           export TARGET_VERSION=${{ matrix.version }}
+          # Run our own local build script
           bash "build_${{ matrix.arch }}.sh"
+        env:
+          # Pass the NDK path to the build script
+          NDK_PATH: ${{ env.NDK_PATH }}
 
       - name: Upload JRE artifact
         uses: actions/upload-artifact@v4
@@ -46,9 +61,8 @@ jobs:
           path: jre*.tar.xz
 
   release:
-    # This job will only run after all 'build' jobs have succeeded
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22-04
     steps:
       - name: Download all JRE artifacts
         uses: actions/download-artifact@v4
@@ -73,9 +87,10 @@ jobs:
       - name: Upload to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
+          repository: ${{ github.repository }} # Upload to YOUR repository
           tag: custom-server-jres
           release_name: "Custom Server JREs"
-          body: "JREs 8, 17, and 21 for arm32 and arm64, optimized for headless server use on Android."
+          body: "JREs 8, 17, and 21 for arm32 and arm64, built with local patches for headless server use on Android."
           overwrite: true
           file: release-assets/*.tar.xz
           file_glob: true
