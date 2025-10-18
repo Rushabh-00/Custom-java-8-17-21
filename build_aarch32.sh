@@ -36,7 +36,9 @@ CONFIGURE_FLAGS=(
   --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/arm"
   --with-debug-level=release
   --disable-precompiled-headers
-  --without-cups
+  --with-x=/no/such/x \
+  --with-alsa=/no/such/alsa \
+  --with-cups=/no/such/cups
 )
 
 if [ "$TARGET_VERSION" == "8" ]; then
@@ -50,7 +52,6 @@ elif [ "$TARGET_VERSION" == "21" ]; then
   CONFIGURE_FLAGS+=(
     --enable-headless-only=yes
     --disable-warnings-as-errors
-    --disable-alsa
   )
 fi
 bash ./configure "${CONFIGURE_FLAGS[@]}"
