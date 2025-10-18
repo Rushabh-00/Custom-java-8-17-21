@@ -35,8 +35,7 @@ bash ./configure \
     --with-extra-cflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp" \
     --with-extra-cxxflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp" \
     --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/arm" \
-    --disable-x11
-    --disable-alsa
+    --enable-headless-only=yes
 
 make images
 
