@@ -1,85 +1,57 @@
 #!/bin/bash
 set -e
 
-# This script builds for 64-bit ARM (arm64-v8a) with separate logic for each Java version.
-
 bash get_source.sh $TARGET_VERSION
 cd openjdk
 
-# --- DEFINITIVE FIX: SEPARATE PATCH LOGIC FOR EACH VERSION ---
 echo "Applying patches for Java $TARGET_VERSION..."
 git reset --hard
 if [ "$TARGET_VERSION" == "8" ]; then
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_main.diff || true
-elif [ "$TARGET_VERSION" == "17" ]; then
-    find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
-elif [ "$TARGET_VERSION" == "21" ]; then
-    find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
+elif [ "$TARGET_VERSION" -ge 17 ]; then
+    find ../patches/Jre_${TARGET_VERSION} -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 fi
-# --- END OF FIX ---
 
-echo "Setting up NDK toolchain for aarch64..."
+echo "Setting up NDK toolchain and environment for aarch64..."
 TOOLCHAIN_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
 export CC="$TOOLCHAIN_PATH/bin/aarch64-linux-android26-clang"
 export CXX="$TOOLCHAIN_PATH/bin/aarch64-linux-android26-clang++"
 SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
+ANDROID_INCLUDE="$SYSROOT_PATH/usr/include"
 
+# Create dummy libraries and header links as done in MojoLauncher scripts
 mkdir -p ../dummy_libs
 ar cru ../dummy_libs/libpthread.a
 ar cru ../dummy_libs/librt.a
 ar cru ../dummy_libs/libthread_db.a
+ln -s -f /usr/include/X11 $ANDROID_INCLUDE/
+ln -s -f /usr/include/fontconfig $ANDROID_INCLUDE/
 
-export CFLAGS="-fPIC -Wno-error -O3 -D__ANDROID__"
+export CFLAGS="-fPIC -Wno-error -O3 -D__ANDROID__ -DHEADLESS=1"
 export LDFLAGS="-L`pwd`/../dummy_libs -Wl,--undefined-version -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
 
 echo "Configuring build for Java $TARGET_VERSION on aarch64..."
 
-# --- DEFINITIVE FIX: SEPARATE CONFIGURE FLAGS FOR EACH VERSION ---
-if [ "$TARGET_VERSION" == "8" ]; then
-  # Java 8 does not support --disable-warnings-as-errors
-  CONFIGURE_FLAGS=(
-    --openjdk-target=aarch64-linux-androideabi
-    --with-jvm-variants=server
-    --with-boot-jdk=$JAVA_HOME
-    --with-toolchain-type=clang
-    --with-sysroot=$SYSROOT_PATH
-    --with-extra-cflags="$CFLAGS"
-    --with-extra-cxxflags="$CFLAGS"
-    --with-extra-ldflags="$LDFLAGS"
-    --with-debug-level=release
-    --disable-precompiled-headers
-  )
-elif [ "$TARGET_VERSION" == "17" ]; then
-  CONFIGURE_FLAGS=(
-    --openjdk-target=aarch64-linux-androideabi
-    --with-jvm-variants=server
-    --with-boot-jdk=$JAVA_HOME
-    --with-toolchain-type=clang
-    --with-sysroot=$SYSROOT_PATH
-    --with-extra-cflags="$CFLAGS"
-    --with-extra-cxxflags="$CFLAGS"
-    --with-extra-ldflags="$LDFLAGS"
-    --with-debug-level=release
-    --disable-precompiled-headers
-    --disable-warnings-as-errors
-  )
-elif [ "$TARGET_VERSION" == "21" ]; then
-  CONFIGURE_FLAGS=(
-    --openjdk-target=aarch64-linux-androideabi
-    --with-jvm-variants=server
-    --with-boot-jdk=$JAVA_HOME
-    --with-toolchain-type=clang
-    --with-sysroot=$SYSROOT_PATH
-    --with-extra-cflags="$CFLAGS"
-    --with-extra-cxxflags="$CFLAGS"
-    --with-extra-ldflags="$LDFLAGS"
-    --with-debug-level=release
-    --disable-precompiled-headers
-    --disable-warnings-as-errors
-  )
+# --- DEFINITIVE FIX: Use minimal flags and let the build system find what it needs ---
+CONFIGURE_FLAGS=(
+  --openjdk-target=aarch64-linux-androideabi
+  --with-jvm-variants=server
+  --with-boot-jdk=$JAVA_HOME
+  --with-toolchain-type=clang
+  --with-sysroot=$SYSROOT_PATH
+  --with-extra-cflags="$CFLAGS"
+  --with-extra-cxxflags="$CFLAGS"
+  --with-extra-ldflags="$LDFLAGS"
+  --with-debug-level=release
+  --x-includes=/usr/include/X11
+  --x-libraries=/usr/lib
+)
+
+# Add conditional flags that are known to be safe
+if [ "$TARGET_VERSION" -ge 17 ]; then
+  CONFIGURE_FLAGS+=(--disable-warnings-as-errors)
 fi
-# --- END OF FIX ---
 
 bash ./configure "${CONFIGURE_FLAGS[@]}"
 
