@@ -35,7 +35,8 @@ bash ./configure \
     --with-extra-cflags="-fPIC -Wno-error" \
     --with-extra-cxxflags="-fPIC -Wno-error" \
     --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/aarch64" \
-    --disable-headful # THE CRITICAL FIX: Disables AWT (X11) and sound (ALSA)
+    --disable-x11
+    --disable-alsa
 
 make images
 
