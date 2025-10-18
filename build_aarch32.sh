@@ -38,7 +38,6 @@ CONFIGURE_FLAGS=(
   --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/arm"
   --with-debug-level=release
   --disable-precompiled-headers
-  --disable-warnings-as-errors
   --without-cups
 )
 
@@ -46,9 +45,11 @@ CONFIGURE_FLAGS=(
 if [ "$TARGET_VERSION" == "8" ]; then
   CONFIGURE_FLAGS+=(--disable-headful)
 elif [ "$TARGET_VERSION" == "17" ]; then
-  CONFIGURE_FLAGS+=(--enable-headless-only=yes)
+  CONFIGURE_FLAGS+=(--enable-headless-only=yes
+    --disable-warnings-as-errors )
 elif [ "$TARGET_VERSION" == "21" ]; then
-  CONFIGURE_FLAGS+=(--enable-headless-only=yes)
+  CONFIGURE_FLAGS+=(--enable-headless-only=yes
+    --disable-warnings-as-errors )
 fi
 # --- END OF FIX ---
 
