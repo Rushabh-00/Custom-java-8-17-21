@@ -37,19 +37,21 @@ CONFIGURE_FLAGS=(
   --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/aarch64"
   --with-debug-level=release
   --disable-precompiled-headers
+  --with-cups-include=$CUPS_DIR
 )
 
 # --- THE DEFINITIVE FIX: EXPLICIT HEADLESS FLAGS FOR EACH VERSION ---
 if [ "$TARGET_VERSION" == "8" ]; then
-  CONFIGURE_FLAGS+=(--disable-headful
-  --without-cups)
+  CONFIGURE_FLAGS+=(
+  --disable-headful)
 elif [ "$TARGET_VERSION" == "17" ]; then
-  CONFIGURE_FLAGS+=(--enable-headless-only=yes
-  --disable-warnings-as-errors )
+  CONFIGURE_FLAGS+=(
+  --enable-headless-only=yes
+  --disable-warnings-as-errors)
 elif [ "$TARGET_VERSION" == "21" ]; then
-  CONFIGURE_FLAGS+=(--enable-headless-only=yes
-  --disable-warnings-as-errors 
-  --without-cups)
+  CONFIGURE_FLAGS+=(
+  --enable-headless-only=yes
+  --disable-warnings-as-errors)
 fi
 # --- END OF FIX ---
 
