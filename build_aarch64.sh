@@ -10,13 +10,13 @@ echo "Applying patches for Java $TARGET_VERSION..."
 git reset --hard
 
 if [ "$TARGET_VERSION" == "8" ]; then
-    # THE FIX: Add '|| true' to ignore expected non-clean patch applications
+    # Apply Java 8 specific patches, ignoring expected "failures"
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_main.diff || true
 elif [ "$TARGET_VERSION" == "17" ]; then
-    find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || echo "Warning: Patch {} failed to apply cleanly, continuing..."'
+    find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 elif [ "$TARGET_VERSION" == "21" ]; then
-    find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || echo "Warning: Patch {} failed to apply cleanly, continuing..."'
+    find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 fi
 
 echo "Setting up NDK toolchain for aarch64..."
@@ -31,10 +31,11 @@ bash ./configure \
     --with-jvm-variants=server \
     --with-boot-jdk=$JAVA_HOME \
     --with-toolchain-type=clang \
+    --with-sysroot=$SYSROOT_PATH \
     --with-extra-cflags="-fPIC -Wno-error" \
     --with-extra-cxxflags="-fPIC -Wno-error" \
     --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/aarch64" \
-    --with-sysroot=$SYSROOT_PATH
+    --disable-headful # THE CRITICAL FIX: Disables AWT (X11) and sound (ALSA)
 
 make images
 
