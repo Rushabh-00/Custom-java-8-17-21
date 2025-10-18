@@ -6,15 +6,18 @@ set -e
 bash get_source.sh $TARGET_VERSION
 cd openjdk
 
+# --- THE DEFINITIVE FIX: EXPLICIT PATCHING FOR ALL VERSIONS ---
 echo "Applying patches for Java $TARGET_VERSION..."
 git reset --hard
-# Use '|| true' to ignore expected, non-fatal patch errors
 if [ "$TARGET_VERSION" == "8" ]; then
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_aarch32.diff || true
-elif [ "$TARGET_VERSION" -ge 17 ]; then
-    find ../patches/Jre_${TARGET_VERSION} -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
+elif [ "$TARGET_VERSION" == "17" ]; then
+    find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
+elif [ "$TARGET_VERSION" == "21" ]; then
+    find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 fi
+# --- END OF FIX ---
 
 echo "Setting up NDK toolchain for aarch32..."
 TOOLCHAIN_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
@@ -22,42 +25,56 @@ export CC="$TOOLCHAIN_PATH/bin/armv7a-linux-androideabi26-clang"
 export CXX="$TOOLCHAIN_PATH/bin/armv7a-linux-androideabi26-clang++"
 SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
 
+mkdir -p ../dummy_libs
+ar cru ../dummy_libs/libpthread.a
+ar cru ../dummy_libs/librt.a
+ar cru ../dummy_libs/libthread_db.a
+
+export CFLAGS="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp -O3 -D__ANDROID__ -DHEADLESS=1 -Wno-error=implicit-function-declaration -Wno-error=int-conversion"
+export LDFLAGS="-L`pwd`/../dummy_libs -Wl,--undefined-version"
+
 echo "Configuring build for Java $TARGET_VERSION on aarch32..."
 
-# Base configure flags for a server build
 CONFIGURE_FLAGS=(
   --openjdk-target=arm-linux-androideabi
   --with-jvm-variants=server
   --with-boot-jdk=$JAVA_HOME
   --with-toolchain-type=clang
   --with-sysroot=$SYSROOT_PATH
-  --with-extra-cflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp"
-  --with-extra-cxxflags="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp"
-  --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/arm"
+  --with-extra-cflags="$CFLAGS"
+  --with-extra-cxxflags="$CFLAGS"
+  --with-extra-ldflags="$LDFLAGS"
   --with-debug-level=release
   --disable-precompiled-headers
-  --with-x=/no/such/x \
-  --with-alsa=/no/such/alsa \
-  --with-cups=/no/such/cups
+  --without-cups
 )
 
+# --- THE DEFINITIVE FIX: EXPLICIT CONFIGURE FLAGS FOR ALL VERSIONS ---
 if [ "$TARGET_VERSION" == "8" ]; then
-  CONFIGURE_FLAGS+=(--disable-headful)
+  CONFIGURE_FLAGS+=(
+    --disable-headful
+    --disable-deploy
+    --disable-javaws
+  )
 elif [ "$TARGET_VERSION" == "17" ]; then
   CONFIGURE_FLAGS+=(
     --enable-headless-only=yes
     --disable-warnings-as-errors
+    --with-jvm-features=-dtrace,-zero,-vm-structs,-epsilongc
   )
 elif [ "$TARGET_VERSION" == "21" ]; then
   CONFIGURE_FLAGS+=(
     --enable-headless-only=yes
     --disable-warnings-as-errors
+    --with-jvm-features=-dtrace,-zero,-vm-structs,-epsilongc
   )
 fi
+# --- END OF FIX ---
+
 bash ./configure "${CONFIGURE_FLAGS[@]}"
 
-make images
+make images || (echo "Build failed once, retrying..." && make images)
 
 cd build/linux-arm-release/images
 JRE_FOLDER_NAME=$(find . -type d -name "jre*" | head -n 1)
-tar -cJf ../../../../jre${TARGET_VERSION}-aarch32.tar.xz $JRE_FOLDER_NAMEtar -cJf ../../../../jre${TARGET_VERSION}-aarch32.tar.xz $JRE_FOLDER_NAME
+tar -cJf ../../../../jre${TARGET_VERSION}-aarch32.tar.xz $JRE_FOLDER_NAME
