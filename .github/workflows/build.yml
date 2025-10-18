@@ -14,7 +14,7 @@ jobs:
         arch: ["aarch32", "aarch64"]
       fail-fast: false
       # THE FIX, PART 1: Limit parallel jobs to reduce runner demand.
-      max-parallel: 2
+      max-parallel: 6
 
     name: "Build Java ${{ matrix.version }} for Android ${{matrix.arch}}"
     # THE FIX, PART 2: Use the most common runner label.
