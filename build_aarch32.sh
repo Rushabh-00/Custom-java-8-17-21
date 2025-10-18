@@ -8,7 +8,6 @@ cd openjdk
 
 echo "Applying patches for Java $TARGET_VERSION..."
 git reset --hard
-# Use '|| true' to ignore expected, non-fatal patch errors
 if [ "$TARGET_VERSION" == "8" ]; then
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_aarch32.diff || true
@@ -24,7 +23,6 @@ SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
 
 echo "Configuring build for Java $TARGET_VERSION on aarch32..."
 
-# --- THE DEFINITIVE FIX: CONDITIONAL HEADLESS FLAGS ---
 # Base configure flags for a server build
 CONFIGURE_FLAGS=(
   --openjdk-target=arm-linux-androideabi
@@ -38,6 +36,7 @@ CONFIGURE_FLAGS=(
   --with-debug-level=release
   --disable-precompiled-headers
   --disable-warnings-as-errors
+  --without-cups # THE NEW OPTIMIZATION
 )
 
 # Add the correct headless flag based on the Java version
@@ -46,7 +45,6 @@ if [ "$TARGET_VERSION" == "8" ]; then
 elif [ "$TARGET_VERSION" -ge 17 ]; then
   CONFIGURE_FLAGS+=(--enable-headless-only=yes)
 fi
-# --- END OF FIX ---
 
 # Run configure with all flags
 bash ./configure "${CONFIGURE_FLAGS[@]}"
