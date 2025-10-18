@@ -1,16 +1,33 @@
 #!/bin/bash
 set -e
 
-# Get Source Code and move into its directory
+# This script builds for 64-bit ARM (arm64-v8a)
+
+# Get Source Code
 bash get_source.sh $TARGET_VERSION
+cd openjdk
 
-# THE FIX: The 'cd openjdk' line is REMOVED from here,
-# because get_source.sh now handles it.
-
+# --- THE DEFINITIVE FIX: USE THE CORRECT PATCHING LOGIC ---
 echo "Applying patches for Java $TARGET_VERSION..."
-git apply ../patches/Jre_${TARGET_VERSION}/*.diff
+git reset --hard # Clean the repository before applying
+
+if [ "$TARGET_VERSION" == "8" ]; then
+    git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff
+    # We are building for aarch64, so apply the main (non-aarch32) patch
+    git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_main.diff
+
+elif [ "$TARGET_VERSION" == "17" ]; then
+    # Find and apply all patches in the Jre_17 directory
+    find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {}'
+
+elif [ "$TARGET_VERSION" == "21" ]; then
+    # Find and apply all patches in the Jre_21 directory
+    find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {}'
+fi
+# --- END OF FIX ---
 
 # Configure the build
+echo "Configuring build for Java $TARGET_VERSION on aarch64..."
 bash ./configure \
     --openjdk-target=aarch64-linux-androideabi \
     --with-jvm-variants=server \
