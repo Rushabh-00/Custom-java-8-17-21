@@ -7,10 +7,10 @@ set -e
 bash get_source.sh $TARGET_VERSION
 cd openjdk
 
-# --- THE CRITICAL STEP: APPLY OUR LOCAL PATCHES ---
+# --- THE CRITICAL FIX: USE THE CORRECT PATH TO YOUR PATCHES ---
 echo "Applying patches for Java $TARGET_VERSION..."
-# Use git apply to apply all .diff files from the correct patch directory
-git apply ../jre_${TARGET_VERSION}/*.diff
+# Use the correct path 'patches/Jre_VERSION'
+git apply ../patches/Jre_${TARGET_VERSION}/*.diff
 
 # Configure the build
 bash ./configure \
