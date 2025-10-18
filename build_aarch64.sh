@@ -7,23 +7,29 @@ set -e
 bash get_source.sh $TARGET_VERSION
 cd openjdk
 
-# --- THE DEFINITIVE FIX: USE THE CORRECT PATCHING LOGIC ---
+# Apply our local patches
 echo "Applying patches for Java $TARGET_VERSION..."
-git reset --hard # Clean the repository before applying
-
+git reset --hard
 if [ "$TARGET_VERSION" == "8" ]; then
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff
-    # We are building for aarch64, so apply the main (non-aarch32) patch
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_main.diff
-
 elif [ "$TARGET_VERSION" == "17" ]; then
-    # Find and apply all patches in the Jre_17 directory
     find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {}'
-
 elif [ "$TARGET_VERSION" == "21" ]; then
-    # Find and apply all patches in the Jre_21 directory
     find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {}'
 fi
+
+# --- THE DEFINITIVE FIX: SET UP THE NDK TOOLCHAIN CORRECTLY ---
+echo "Setting up NDK toolchain for aarch64..."
+# Define the path to the NDK toolchain binaries
+TOOLCHAIN_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
+
+# Export the C and C++ compilers for the target architecture (API level 26)
+export CC="$TOOLCHAIN_PATH/bin/aarch64-linux-android26-clang"
+export CXX="$TOOLCHAIN_PATH/bin/aarch64-linux-android26-clang++"
+
+# Define the path to the system root (headers and libraries)
+SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
 # --- END OF FIX ---
 
 # Configure the build
@@ -36,7 +42,7 @@ bash ./configure \
     --with-extra-cflags="-fPIC -Wno-error" \
     --with-extra-cxxflags="-fPIC -Wno-error" \
     --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/aarch64" \
-    --with-ndk=$NDK_PATH
+    --with-sysroot=$SYSROOT_PATH
 
 # Run the build
 make images
