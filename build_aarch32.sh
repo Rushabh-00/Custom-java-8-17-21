@@ -30,7 +30,7 @@ ar cru ../dummy_libs/libpthread.a
 ar cru ../dummy_libs/librt.a
 ar cru ../dummy_libs/libthread_db.a
 
-export CFLAGS="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp -O3 -D__ANDROID__ -DHEADLESS=1 -Wno-error=implicit-function-declaration -Wno-error=int-conversion"
+export CFLAGS="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp -O3 -D__ANDROID__ -DHEADLESS=1"
 export LDFLAGS="-L`pwd`/../dummy_libs -Wl,--undefined-version"
 
 echo "Configuring build for Java $TARGET_VERSION on aarch32..."
@@ -66,8 +66,24 @@ elif [ "$TARGET_VERSION" == "21" ]; then
   CONFIGURE_FLAGS+=(
     --enable-headless-only=yes
     --disable-warnings-as-errors
+    --disable-alsa
     --with-jvm-features=-dtrace,-zero,-vm-structs,-epsilongc
   )
+fi
+# --- END OF FIX ---
+
+bash ./configure "${CONFIGURE_FLAGS[@]}"
+
+make images || (echo "Build failed once, retrying..." && make images)
+
+echo "Build complete. Now repacking JRE..."
+cd build/linux-arm-release/images
+FULL_JRE_DIR=$(find . -type d -name "jre*" | head -n 1)
+REPACKED_JRE_DIR="jre-server-minimal"
+
+bash ../../../../repack_server_jre.sh "$TARGET_VERSION" "$FULL_JRE_DIR" "$REPACKED_JRE_DIR"
+
+tar -cJf ../../../../jre${TARGET_VERSION}-aarch32.tar.xz "$REPACKED_JRE_DIR"  )
 fi
 # --- END OF FIX ---
 
