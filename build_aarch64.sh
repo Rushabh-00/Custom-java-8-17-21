@@ -35,8 +35,7 @@ bash ./configure \
     --with-extra-cflags="-fPIC -Wno-error" \
     --with-extra-cxxflags="-fPIC -Wno-error" \
     --with-extra-ldflags="-Wl,-rpath-link=$JAVA_HOME/jre/lib/aarch64" \
-    --disable-x11
-    --disable-alsa
+    --enable-headless-only=yes
 
 make images
 
