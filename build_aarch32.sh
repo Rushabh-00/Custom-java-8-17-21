@@ -29,19 +29,27 @@ export LDFLAGS="-L`pwd`/../dummy_libs -Wl,--undefined-version"
 
 echo "Configuring build for Java $TARGET_VERSION on aarch32..."
 
-# --- THE DEFINITIVE FIX: REMOVE ALL INCORRECT --disable/--without FLAGS ---
-bash ./configure \
-    --openjdk-target=arm-linux-androideabi \
-    --with-jvm-variants=server \
-    --with-boot-jdk=$JAVA_HOME \
-    --with-toolchain-type=clang \
-    --with-sysroot=$SYSROOT_PATH \
-    --with-extra-cflags="$CFLAGS" \
-    --with-extra-cxxflags="$CFLAGS" \
-    --with-extra-ldflags="$LDFLAGS" \
-    --with-debug-level=release \
-    --disable-precompiled-headers \
-    --disable-warnings-as-errors
+# --- THE DEFINITIVE FIX: REMOVE ALL INCORRECT FLAGS, USE CONDITIONAL FLAGS ---
+CONFIGURE_FLAGS=(
+  --openjdk-target=arm-linux-androideabi
+  --with-jvm-variants=server
+  --with-boot-jdk=$JAVA_HOME
+  --with-toolchain-type=clang
+  --with-sysroot=$SYSROOT_PATH
+  --with-extra-cflags="$CFLAGS"
+  --with-extra-cxxflags="$CFLAGS"
+  --with-extra-ldflags="$LDFLAGS"
+  --with-debug-level=release
+  --disable-precompiled-headers
+)
+
+# Add version-specific flags
+if [ "$TARGET_VERSION" -ge 17 ]; then
+  CONFIGURE_FLAGS+=(--disable-warnings-as-errors)
+fi
+# --- END OF FIX ---
+
+bash ./configure "${CONFIGURE_FLAGS[@]}"
 
 make images || (echo "Build failed once, retrying..." && make images)
 
