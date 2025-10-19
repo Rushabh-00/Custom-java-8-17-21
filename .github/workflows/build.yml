@@ -67,21 +67,51 @@ jobs:
           NDK_PATH: ${{ env.NDK_PATH }}
 
       - name: Upload JRE artifact on success
-        if: success() # Only run this if the build was successful
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: "jre-${{ matrix.version }}-${{ matrix.arch }}"
           path: jre*.tar.xz
 
-      # --- THIS IS THE NEW, CRITICAL STEP FOR DEBUGGING ---
-      - name: Upload config.log on failure
-        if: failure() # This step ONLY runs if the build step above fails
+      # --- THIS IS THE NEW, DEFINITIVE DEBUGGING STEP ---
+      - name: Find, Filter, and Rename Error Log on Failure
+        if: failure()
+        run: |
+          # Define paths for clarity
+          FULL_LOG_PATH="openjdk/config.log"
+          FILTERED_LOG_NAME="error-log-java${{ matrix.version }}-${{ matrix.arch }}.log"
+          
+          echo "Build failed. Creating filtered error log: $FILTERED_LOG_NAME"
+          
+          # Check if the config.log was even created
+          if [ -f "$FULL_LOG_PATH" ]; then
+            echo "--- Found config.log. Filtering for errors... ---" > $FILTERED_LOG_NAME
+            
+            # Add the final 200 lines, which usually contain the summary error
+            echo "\n\n=============== FINAL 200 LINES ===============\n" >> $FILTERED_LOG_NAME
+            tail -n 200 "$FULL_LOG_PATH" >> $FILTERED_LOG_NAME
+            
+            # Add any lines containing "error:", "fatal:", or "not found" with context
+            echo "\n\n=============== DETAILED ERRORS & CONTEXT ===============\n" >> $FILTERED_LOG_NAME
+            grep -i -C 15 "error:" "$FULL_LOG_PATH" >> $FILTERED_LOG_NAME || echo "No lines with 'error:' found."
+            grep -i -C 15 "fatal:" "$FULL_LOG_PATH" >> $FILTERED_LOG_NAME || echo "No lines with 'fatal:' found."
+            grep -i -C 15 "not found" "$FULL_LOG_PATH" >> $FILTERED_LOG_NAME || echo "No lines with 'not found' found."
+
+            echo "\n--- Filtering complete. ---" >> $FILTERED_LOG_NAME
+          else
+            echo "--- ERROR: config.log not found! ---" > $FILTERED_LOG_NAME
+            echo "The build likely failed before the './configure' step." >> $FILTERED_LOG_NAME
+            echo "Please check the main build log for errors in 'git apply' or script setup." >> $FILTERED_LOG_NAME
+          fi
+
+      - name: Upload Filtered Error Log on Failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: "ERROR-LOG-java${{ matrix.version }}-${{ matrix.arch }}"
-          # The config.log file is located inside the openjdk source directory
-          path: openjdk/config.log
-          retention-days: 7 # Keep the error log for 7 days
+          # Upload the new, small, filtered log file
+          path: "error-log-java${{ matrix.version }}-${{ matrix.arch }}.log"
+          retention-days: 7
       # --- END OF NEW STEP ---
 
   release:
@@ -96,19 +126,20 @@ jobs:
       - name: Rename and prepare artifacts
         run: |
           mkdir release-assets
-          # Find and move files, ignoring errors if an artifact doesn't exist (due to a failed build)
-          find artifacts/jre-8-aarch32 -name "*.tar.xz" -exec mv {} release-assets/8-arm32.tar.xz \; || echo "Java 8 aarch32 artifact not found."
-          find artifacts/jre-8-aarch64 -name "*.tar.xz" -exec mv {} release-assets/8-arm64.tar.xz \; || echo "Java 8 aarch64 artifact not found."
-          find artifacts/jre-17-aarch32 -name "*.tar.xz" -exec mv {} release-assets/17-arm32.tar.xz \; || echo "Java 17 aarch32 artifact not found."
-          find artifacts/jre-17-aarch64 -name "*.tar.xz" -exec mv {} release-assets/17-arm64.tar.xz \; || echo "Java 17 aarch64 artifact not found."
-          find artifacts/jre-21-aarch32 -name "*.tar.xz" -exec mv {} release-assets/21-arm32.tar.xz \; || echo "Java 21 aarch32 artifact not found."
-          find artifacts/jre-21-aarch64 -name "*.tar.xz" -exec mv {} release-assets/21-arm64.tar.xz \; || echo "Java 21 aarch64 artifact not found."
+          # This will now gracefully handle missing artifacts from failed builds
+          find artifacts/jre-8-aarch32 -name "*.tar.xz" -exec mv {} release-assets/8-arm32.tar.xz \; 2>/dev/null || true
+          find artifacts/jre-8-aarch64 -name "*.tar.xz" -exec mv {} release-assets/8-arm64.tar.xz \; 2>/dev/null || true
+          find artifacts/jre-17-aarch32 -name "*.tar.xz" -exec mv {} release-assets/17-arm32.tar.xz \; 2>/dev/null || true
+          find artifacts/jre-17-aarch64 -name "*.tar.xz" -exec mv {} release-assets/17-arm64.tar.xz \; 2>/dev/null || true
+          find artifacts/jre-21-aarch32 -name "*.tar.xz" -exec mv {} release-assets/21-arm32.tar.xz \; 2>/dev/null || true
+          find artifacts/jre-21-aarch64 -name "*.tar.xz" -exec mv {} release-assets/21-arm64.tar.xz \; 2>/dev/null || true
           
           echo "Prepared release assets:"
           ls -l release-assets
 
       - name: Upload to GitHub Release
-        if: success() && steps.rename.outputs.files_found > 0 # Only release if there are files to upload
+        # This step will only run if there are files in release-assets to upload
+        if: success() &&حة'ls -A release-assets | wc -l' -gt 0 ]
         uses: svenstaro/upload-release-action@v2
         with:
           repository: ${{ github.repository }}
