@@ -46,7 +46,6 @@ jobs:
           distribution: temurin
 
       - name: Install All Build Dependencies
-        # This step installs every library the configure scripts have asked for.
         run: |
           sudo apt-get update
           sudo apt-get -y install autoconf build-essential git python3 python-is-python3 unzip zip systemtap-sdt-dev gcc-multilib g++-multilib libxtst-dev libelf-dev libfontconfig1-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxt-dev libcups2-dev libasound2-dev libfreetype6-dev
@@ -58,48 +57,20 @@ jobs:
           echo "NDK_PATH=$GITHUB_WORKSPACE/android-ndk-r28c" >> $GITHUB_ENV
 
       - name: Build the Patched JRE
-        id: build_step
-        continue-on-error: true # Allows us to capture logs even if this step fails
         run: |
           export TARGET_VERSION=${{ matrix.version }}
           export TARGET_ARCH=${{ matrix.arch }}
-          # Run the single, unified build script, piping all output to a log file
-          bash "build.sh" 2>&1 | tee build_output.log
+          bash "build.sh"
         env:
           NDK_PATH: ${{ env.NDK_PATH }}
 
-      - name: Check Build Status and Capture Log
-        if: steps.build_step.outcome == 'failure'
-        run: |
-          echo "Build failed. Capturing the end of the log..."
-          LOG_FILENAME="ERROR-LOG-java${{ matrix.version }}-${{ matrix.arch }}.txt"
-          # Save the last 200 lines of the full log, which contains the specific error
-          tail -n 200 build_output.log > $LOG_FILENAME
-          echo "Created error log: $LOG_FILENAME"
-          echo "LOG_FILENAME=$LOG_FILENAME" >> $GITHUB_ENV
-
-      - name: Upload Error Log on Failure
-        if: steps.build_step.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.LOG_FILENAME }}
-          path: ${{ env.LOG_FILENAME }}
-      
-      - name: Fail workflow if build failed
-        # This is a critical step to ensure the overall workflow shows a red 'X'
-        if: steps.build_step.outcome == 'failure'
-        run: exit 1
-
-      - name: Upload JRE artifact on success
-        if: steps.build_step.outcome == 'success'
+      - name: Upload JRE artifact
         uses: actions/upload-artifact@v4
         with:
           name: "jre-${{ matrix.version }}-${{ matrix.arch }}"
           path: jre*.tar.xz
 
   release:
-    # This job will only run if the entire build matrix succeeded
-    if: success()
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -111,13 +82,12 @@ jobs:
       - name: Rename and prepare artifacts
         run: |
           mkdir release-assets
-          # Find and move each artifact, ignoring errors if one failed and wasn't uploaded
-          find artifacts/jre-8-aarch32 -name "*.tar.xz" -exec mv {} release-assets/8-arm32.tar.xz \; || echo "Java 8 aarch32 artifact not found."
-          find artifacts/jre-8-aarch64 -name "*.tar.xz" -exec mv {} release-assets/8-arm64.tar.xz \; || echo "Java 8 aarch64 artifact not found."
-          find artifacts/jre-17-aarch32 -name "*.tar.xz" -exec mv {} release-assets/17-arm32.tar.xz \; || echo "Java 17 aarch32 artifact not found."
-          find artifacts/jre-17-aarch64 -name "*.tar.xz" -exec mv {} release-assets/17-arm64.tar.xz \; || echo "Java 17 aarch64 artifact not found."
-          find artifacts/jre-21-aarch32 -name "*.tar.xz" -exec mv {} release-assets/21-arm32.tar.xz \; || echo "Java 21 aarch32 artifact not found."
-          find artifacts/jre-21-aarch64 -name "*.tar.xz" -exec mv {} release-assets/21-arm64.tar.xz \; || echo "Java 21 aarch64 artifact not found."
+          find artifacts/jre-8-aarch32 -name "*.tar.xz" -exec mv {} release-assets/8-arm32.tar.xz \;
+          find artifacts/jre-8-aarch64 -name "*.tar.xz" -exec mv {} release-assets/8-arm64.tar.xz \;
+          find artifacts/jre-17-aarch32 -name "*.tar.xz" -exec mv {} release-assets/17-arm32.tar.xz \;
+          find artifacts/jre-17-aarch64 -name "*.tar.xz" -exec mv {} release-assets/17-arm64.tar.xz \;
+          find artifacts/jre-21-aarch32 -name "*.tar.xz" -exec mv {} release-assets/21-arm32.tar.xz \;
+          find artifacts/jre-21-aarch64 -name "*.tar.xz" -exec mv {} release-assets/21-arm64.tar.xz \;
           echo "Prepared release assets:"
           ls -l release-assets
 
