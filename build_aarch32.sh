@@ -20,12 +20,13 @@ export CXX="$TOOLCHAIN_PATH/bin/armv7a-linux-androideabi26-clang++"
 SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
 ANDROID_INCLUDE="$SYSROOT_PATH/usr/include"
 
-# --- THE DEFINITIVE FIX: CREATE SYMBOLIC LINKS TO HOST LIBRARIES ---
+# --- THE DEFINITIVE FIX: CREATE SYMBOLIC LINKS FOR ALL HOST LIBRARIES ---
 echo "Creating symbolic links for required host libraries..."
 ln -s -f /usr/include/X11 $ANDROID_INCLUDE/
 ln -s -f /usr/include/fontconfig $ANDROID_INCLUDE/
 ln -s -f /usr/include/alsa $ANDROID_INCLUDE/
 ln -s -f /usr/include/cups $ANDROID_INCLUDE/
+ln -s -f /usr/include/freetype2 $ANDROID_INCLUDE/freetype2
 # --- END OF FIX ---
 
 mkdir -p ../dummy_libs
@@ -50,6 +51,8 @@ CONFIGURE_FLAGS=(
   --with-debug-level=release
   --x-includes=/usr/include/X11
   --x-libraries=/usr/lib
+  --with-freetype-include=/usr/include/freetype2 # THE FIX
+  --with-freetype-lib=/usr/lib/`uname -m`-linux-gnu # THE FIX
 )
 
 if [ "$TARGET_VERSION" -ge 17 ]; then
