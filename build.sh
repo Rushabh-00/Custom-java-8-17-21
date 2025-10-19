@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-# This is the single, unified build script that handles all Java versions and architectures.
+# This is the single, unified build script that correctly handles all Java versions and architectures,
+# based on the proven MojoLauncher scripts and all of your corrections.
 
 # 1. ========== SETUP ENVIRONMENT BASED ON ARCHITECTURE ==========
 if [ "$TARGET_ARCH" == "aarch32" ]; then
@@ -21,7 +22,7 @@ else
   exit 1
 fi
 
-# 2. ========== SETUP NDK AND SYSTEM LIBRARIES ==========
+# 2. ========== SETUP NDK AND SYSTEM LIBRARIES (THE MOJOLAUNCHER WAY) ==========
 echo "Setting up NDK toolchain and library links..."
 TOOLCHAIN_PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
 SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
@@ -32,19 +33,20 @@ export CXX="$TOOLCHAIN_PATH/bin/${COMPILER_PREFIX}-clang++"
 export AR="$TOOLCHAIN_PATH/bin/llvm-ar"
 export NM="$TOOLCHAIN_PATH/bin/llvm-nm"
 
-# Create symbolic links to host libraries, a critical step
+# Create symbolic links to host libraries - this is a critical step
 ln -s -f /usr/include/X11 $ANDROID_INCLUDE/
 ln -s -f /usr/include/alsa $ANDROID_INCLUDE/
 ln -s -f /usr/include/cups $ANDROID_INCLUDE/
 ln -s -f /usr/include/fontconfig $ANDROID_INCLUDE/
 ln -s -f /usr/include/freetype2 $ANDROID_INCLUDE/
 
+# Create dummy libraries to satisfy the linker - another critical step
 mkdir -p dummy_libs
 ar cru dummy_libs/libpthread.a
 ar cru dummy_libs/librt.a
 ar cru dummy_libs/libthread_db.a
 
-# 3. ========== GET AND PATCH SOURCE CODE ==========
+# 3. ========== GET AND PATCH SOURCE CODE (EXPLICIT LOGIC) ==========
 bash get_source.sh $TARGET_VERSION
 cd openjdk
 
@@ -63,15 +65,15 @@ elif [ "$TARGET_VERSION" == "21" ]; then
     find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 fi
 
-# 4. ========== CONFIGURE THE BUILD (SEPARATE LOGIC FOR EACH VERSION) ==========
+# 4. ========== CONFIGURE THE BUILD (CORRECT, SEPARATE LOGIC FOR EACH VERSION) ==========
 echo "Configuring build for Java $TARGET_VERSION on $TARGET_ARCH..."
 
-export CFLAGS_BASE="-fPIC -O3 -D__ANDROID__ ${EXTRA_CFLAGS}"
+export CFLAGS_BASE="-fPIC -O3 -D__ANDROID__ -DHEADLESS=1 ${EXTRA_CFLAGS}"
 export LDFLAGS_BASE="-L`pwd`/../dummy_libs -Wl,--undefined-version ${EXTRA_LDFLAGS}"
 
-# --- DEFINITIVE FIX: SEPARATE CONFIGURE FLAGS FOR EACH VERSION ---
+# --- DEFINITIVE FIX: SEPARATE, CORRECT CONFIGURE FLAGS FOR EACH VERSION ---
 if [ "$TARGET_VERSION" == "8" ]; then
-  # Java 8 requires explicit paths to X11 and CUPS but does not support --disable-warnings-as-errors
+  # Java 8 requires explicit paths to the host libraries and does not support --disable-warnings-as-errors
   bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
@@ -82,12 +84,15 @@ if [ "$TARGET_VERSION" == "8" ]; then
     --with-extra-cxxflags="$CFLAGS_BASE" \
     --with-extra-ldflags="$LDFLAGS_BASE" \
     --with-debug-level=release \
-    --disable-precompiled-headers \
     --with-cups-include=/usr/include \
+    --with-alsa=/usr/include \
+    --with-fontconfig-include=/usr/include \
+    --with-freetype-include=/usr/include/freetype2 \
+    --with-freetype-lib=/usr/lib/`uname -m`-linux-gnu \
     --x-includes=/usr/include/X11 \
     --x-libraries=/usr/lib/`uname -m`-linux-gnu
 elif [ "$TARGET_VERSION" == "17" ]; then
-  # Java 17 fails if CUPS is mentioned but works without ALSA
+  # Java 17 works without explicit alsa/cups flags once the headers are linked
   bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
@@ -98,12 +103,11 @@ elif [ "$TARGET_VERSION" == "17" ]; then
     --with-extra-cxxflags="$CFLAGS_BASE" \
     --with-extra-ldflags="$LDFLAGS_BASE" \
     --with-debug-level=release \
-    --disable-precompiled-headers \
     --disable-warnings-as-errors \
     --x-includes=/usr/include/X11 \
     --x-libraries=/usr/lib/`uname -m`-linux-gnu
 elif [ "$TARGET_VERSION" == "21" ]; then
-  # Java 21 is the most modern and requires the least explicit configuration
+  # Java 21 has a similar configuration to 17
   bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
@@ -114,7 +118,6 @@ elif [ "$TARGET_VERSION" == "21" ]; then
     --with-extra-cxxflags="$CFLAGS_BASE" \
     --with-extra-ldflags="$LDFLAGS_BASE" \
     --with-debug-level=release \
-    --disable-precompiled-headers \
     --disable-warnings-as-errors \
     --x-includes=/usr/include/X11 \
     --x-libraries=/usr/lib/`uname -m`-linux-gnu
@@ -129,6 +132,10 @@ BUILD_DIR_ARCH=$(echo "$TARGET_OPENJDK" | sed 's/-androideabi//')
 cd build/linux-${BUILD_DIR_ARCH}-release/images
 FULL_JRE_DIR=$(find . -type d -name "jre*" | head -n 1)
 REPACKED_JRE_DIR="jre-server-minimal"
+
+bash ../../../../repack_server_jre.sh "$TARGET_VERSION" "$FULL_JRE_DIR" "$REPACKED_JRE_DIR"
+
+tar -cJf ../../../../jre${TARGET_VERSION}-${TARGET_ARCH}.tar.xz "$REPACKED_JRE_DIR"REPACKED_JRE_DIR="jre-server-minimal"
 
 bash ../../../../repack_server_jre.sh "$TARGET_VERSION" "$FULL_JRE_DIR" "$REPACKED_JRE_DIR"
 
