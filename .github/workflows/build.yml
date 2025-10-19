@@ -18,11 +18,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Your Repository
+      - name: Checkout Your Repository (with patches)
         uses: actions/checkout@v4
 
       - name: Free up disk space
-        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" && sudo apt-get autoremove -y && sudo apt-get clean
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get autoremove -y
+          sudo apt-get clean
 
       - name: Set up Boot JDK for Java 8
         if: matrix.version == 8
@@ -59,16 +62,27 @@ jobs:
       - name: Build the Patched JRE
         run: |
           export TARGET_VERSION=${{ matrix.version }}
-          export TARGET_ARCH=${{ matrix.arch }}
-          bash "build.sh"
+          bash "build_${{ matrix.arch }}.sh"
         env:
           NDK_PATH: ${{ env.NDK_PATH }}
 
-      - name: Upload JRE artifact
+      - name: Upload JRE artifact on success
+        if: success() # Only run this if the build was successful
         uses: actions/upload-artifact@v4
         with:
           name: "jre-${{ matrix.version }}-${{ matrix.arch }}"
           path: jre*.tar.xz
+
+      # --- THIS IS THE NEW, CRITICAL STEP FOR DEBUGGING ---
+      - name: Upload config.log on failure
+        if: failure() # This step ONLY runs if the build step above fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: "ERROR-LOG-java${{ matrix.version }}-${{ matrix.arch }}"
+          # The config.log file is located inside the openjdk source directory
+          path: openjdk/config.log
+          retention-days: 7 # Keep the error log for 7 days
+      # --- END OF NEW STEP ---
 
   release:
     needs: build
@@ -82,16 +96,19 @@ jobs:
       - name: Rename and prepare artifacts
         run: |
           mkdir release-assets
-          find artifacts/jre-8-aarch32 -name "*.tar.xz" -exec mv {} release-assets/8-arm32.tar.xz \;
-          find artifacts/jre-8-aarch64 -name "*.tar.xz" -exec mv {} release-assets/8-arm64.tar.xz \;
-          find artifacts/jre-17-aarch32 -name "*.tar.xz" -exec mv {} release-assets/17-arm32.tar.xz \;
-          find artifacts/jre-17-aarch64 -name "*.tar.xz" -exec mv {} release-assets/17-arm64.tar.xz \;
-          find artifacts/jre-21-aarch32 -name "*.tar.xz" -exec mv {} release-assets/21-arm32.tar.xz \;
-          find artifacts/jre-21-aarch64 -name "*.tar.xz" -exec mv {} release-assets/21-arm64.tar.xz \;
+          # Find and move files, ignoring errors if an artifact doesn't exist (due to a failed build)
+          find artifacts/jre-8-aarch32 -name "*.tar.xz" -exec mv {} release-assets/8-arm32.tar.xz \; || echo "Java 8 aarch32 artifact not found."
+          find artifacts/jre-8-aarch64 -name "*.tar.xz" -exec mv {} release-assets/8-arm64.tar.xz \; || echo "Java 8 aarch64 artifact not found."
+          find artifacts/jre-17-aarch32 -name "*.tar.xz" -exec mv {} release-assets/17-arm32.tar.xz \; || echo "Java 17 aarch32 artifact not found."
+          find artifacts/jre-17-aarch64 -name "*.tar.xz" -exec mv {} release-assets/17-arm64.tar.xz \; || echo "Java 17 aarch64 artifact not found."
+          find artifacts/jre-21-aarch32 -name "*.tar.xz" -exec mv {} release-assets/21-arm32.tar.xz \; || echo "Java 21 aarch32 artifact not found."
+          find artifacts/jre-21-aarch64 -name "*.tar.xz" -exec mv {} release-assets/21-arm64.tar.xz \; || echo "Java 21 aarch64 artifact not found."
+          
           echo "Prepared release assets:"
           ls -l release-assets
 
       - name: Upload to GitHub Release
+        if: success() && steps.rename.outputs.files_found > 0 # Only release if there are files to upload
         uses: svenstaro/upload-release-action@v2
         with:
           repository: ${{ github.repository }}
