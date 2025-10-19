@@ -21,11 +21,11 @@ jobs:
       - name: Checkout Your Repository (with patches)
         uses: actions/checkout@v4
 
-      - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get autoremove -y
-          sudo apt-get clean
+#      - name: Free up disk space
+#        run: |
+#          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+#          sudo apt-get autoremove -y
+#          sudo apt-get clean
 
       - name: Set up Boot JDK for Java 8
         if: matrix.version == 8
