@@ -20,20 +20,24 @@ export CXX="$TOOLCHAIN_PATH/bin/armv7a-linux-androideabi26-clang++"
 SYSROOT_PATH="$TOOLCHAIN_PATH/sysroot"
 ANDROID_INCLUDE="$SYSROOT_PATH/usr/include"
 
-# Create dummy libraries and header links as done in MojoLauncher scripts
+# --- THE DEFINITIVE FIX: CREATE SYMBOLIC LINKS TO HOST LIBRARIES ---
+echo "Creating symbolic links for required host libraries..."
+ln -s -f /usr/include/X11 $ANDROID_INCLUDE/
+ln -s -f /usr/include/fontconfig $ANDROID_INCLUDE/
+ln -s -f /usr/include/alsa $ANDROID_INCLUDE/
+ln -s -f /usr/include/cups $ANDROID_INCLUDE/
+# --- END OF FIX ---
+
 mkdir -p ../dummy_libs
 ar cru ../dummy_libs/libpthread.a
 ar cru ../dummy_libs/librt.a
 ar cru ../dummy_libs/libthread_db.a
-ln -s -f /usr/include/X11 $ANDROID_INCLUDE/
-ln -s -f /usr/include/fontconfig $ANDROID_INCLUDE/
 
-export CFLAGS="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp -O3 -D__ANDROID__ -DHEADLESS=1"
+export CFLAGS="-fPIC -Wno-error -mfloat-abi=softfp -mfpu=vfp -O3 -D__ANDROID__"
 export LDFLAGS="-L`pwd`/../dummy_libs -Wl,--undefined-version"
 
 echo "Configuring build for Java $TARGET_VERSION on aarch32..."
 
-# --- DEFINITIVE FIX: Use minimal flags and let the build system find what it needs ---
 CONFIGURE_FLAGS=(
   --openjdk-target=arm-linux-androideabi
   --with-jvm-variants=server
@@ -48,7 +52,6 @@ CONFIGURE_FLAGS=(
   --x-libraries=/usr/lib
 )
 
-# Add conditional flags that are known to be safe
 if [ "$TARGET_VERSION" -ge 17 ]; then
   CONFIGURE_FLAGS+=(--disable-warnings-as-errors)
 fi
