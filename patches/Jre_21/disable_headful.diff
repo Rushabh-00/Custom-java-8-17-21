@@ -1,0 +1,11 @@
+--- a/make/conf/headless.conf	2023-01-01 00:00:00.000000000 +0000
++++ b/make/conf/headless.conf	2023-01-01 00:00:00.000000000 +0000
+@@ -29,7 +29,7 @@
+ # a jdk that does not include these modules.
+ ifeq ($(findstring java.desktop, $(ADD_MODULES)), java.desktop)
+   # When building headless, we need to locate X11 etc to build AWT.
+-  include conf/x11.conf
++  # include conf/x11.conf
+ endif
+ 
+ ifeq ($(findstring jdk.accessibility, $(ADD_MODULES)), jdk.accessibility)
