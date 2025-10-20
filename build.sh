@@ -1,7 +1,32 @@
 #!/bin/bash
 set -e
 
-# This is the single, unified build script that handles all Java versions and architectures.
+LOGFILE=build.log
+echo "Starting build for Java $TARGET_VERSION on $TARGET_ARCH"
+echo "Logs will be saved to $LOGFILE"
+echo
+
+run_with_spinner() {
+  "$@" &> "$LOGFILE" &
+  PID=$!
+
+  # spinner/dots loop
+  while kill -0 $PID 2>/dev/null; do
+    echo -n "."
+    sleep 2
+  done
+
+  wait $PID
+  STATUS=$?
+  echo
+
+  if [ $STATUS -ne 0 ]; then
+    echo "Command failed: $*"
+    echo "Last 200 lines of $LOGFILE:"
+    tail -n 50 "$LOGFILE"
+    exit $STATUS
+  fi
+}
 
 # ====================================================================================
 #  1. GLOBAL SETUP (NDK, Compilers, System Libraries)
@@ -62,7 +87,6 @@ bash get_source.sh $TARGET_VERSION
 cd openjdk
 git reset --hard
 
-# ------------------------- JAVA 8 -------------------------
 if [ "$TARGET_VERSION" == "8" ]; then
   echo "--- Applying Java 8 Patches ---"
   git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
@@ -71,9 +95,9 @@ if [ "$TARGET_VERSION" == "8" ]; then
   else
     git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android_main.diff || true
   fi
-  
+
   echo "--- Configuring Java 8 ---"
-  bash ./configure \
+  run_with_spinner bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
     --with-boot-jdk=$JAVA_HOME \
@@ -92,13 +116,12 @@ if [ "$TARGET_VERSION" == "8" ]; then
     --with-freetype-lib=/usr/lib/`uname -m`-linux-gnu \
     --with-alsa=/usr/include/alsa
 
-# ------------------------- JAVA 17 -------------------------
 elif [ "$TARGET_VERSION" == "17" ]; then
   echo "--- Applying Java 17 Patches ---"
   find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 
   echo "--- Configuring Java 17 ---"
-  bash ./configure \
+  run_with_spinner bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
     --with-boot-jdk=$JAVA_HOME \
@@ -116,14 +139,13 @@ elif [ "$TARGET_VERSION" == "17" ]; then
     --with-fontconfig-include=/usr/include \
     --with-freetype-include=/usr/include/freetype2 \
     --with-freetype-lib=/usr/lib/`uname -m`-linux-gnu
-    
-# ------------------------- JAVA 21 -------------------------
+
 elif [ "$TARGET_VERSION" == "21" ]; then
   echo "--- Applying Java 21 Patches ---"
   find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 
   echo "--- Configuring Java 21 ---"
-  bash ./configure \
+  run_with_spinner bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
     --with-boot-jdk=$JAVA_HOME \
@@ -147,7 +169,11 @@ fi
 #  3. COMPILE AND REPACK
 # ====================================================================================
 
-make images || (echo "Build failed once, retrying..." && make images)
+run_with_spinner make images || {
+  echo "Build failed after retrying once, showing last 50 lines:"
+  tail -n 50 "$LOGFILE"
+  exit 1
+}
 
 echo "Build complete. Now repacking JRE..."
 BUILD_DIR_ARCH=$(echo "$TARGET_OPENJDK" | sed 's/-androideabi//')
@@ -158,3 +184,5 @@ REPACKED_JRE_DIR="jre-server-minimal"
 bash ../../../../repack_server_jre.sh "$TARGET_VERSION" "$FULL_JRE_DIR" "$REPACKED_JRE_DIR"
 
 tar -cJf ../../../../jre${TARGET_VERSION}-${TARGET_ARCH}.tar.xz "$REPACKED_JRE_DIR"
+
+echo "Build and repack complete!"
