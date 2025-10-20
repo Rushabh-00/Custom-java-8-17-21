@@ -1,0 +1,11 @@
+--- a/common/autoconf/flags.m4	2023-01-01 00:00:00.000000000 +0000
++++ b/common/autoconf/flags.m4	2023-01-01 00:00:00.000000000 +0000
+@@ -1656,7 +1656,7 @@
+   AC_MSG_RESULT([$HEADLESS_ONLY])
+ 
+   if test "x$HEADLESS_ONLY" = "xfalse"; then
+-    AC_CHECK_HEADERS(X11/Xlib.h X11/extensions/Xrender.h X11/extensions/Xext.h, [], [
++    AC_CHECK_HEADERS(X11/Xlib.h X11/extensions/Xrender.h X11/extensions/Xext.h, [], [ AC_MSG_WARN([X11 headers not found, building headless only.])
+       AC_SUBST(BUILD_HEADFUL, false)
+       AC_SUBST(HEADLESS_ONLY, true)
+     ])
