@@ -1,35 +1,34 @@
 #!/bin/bash
 set -e
 
+# This is the final, unified build script with specific fixes for each Java version.
+
 LOGFILE=build.log
 echo "Starting build for Java $TARGET_VERSION on $TARGET_ARCH"
 echo "Logs will be saved to $LOGFILE"
 echo
 
+# Your excellent spinner and error-reporting function
 run_with_spinner() {
   "$@" &> "$LOGFILE" &
   PID=$!
-
-  # spinner/dots loop
   while kill -0 $PID 2>/dev/null; do
     echo -n "."
     sleep 2
   done
-
   wait $PID
   STATUS=$?
   echo
-
   if [ $STATUS -ne 0 ]; then
     echo "Command failed: $*"
     echo "Last 200 lines of $LOGFILE:"
-    tail -n 50 "$LOGFILE"
+    tail -n 200 "$LOGFILE"
     exit $STATUS
   fi
 }
 
 # ====================================================================================
-#  1. GLOBAL SETUP (NDK, Compilers, System Libraries)
+#  1. GLOBAL SETUP
 # ====================================================================================
 
 if [ "$TARGET_ARCH" == "aarch32" ]; then
@@ -38,9 +37,6 @@ if [ "$TARGET_ARCH" == "aarch32" ]; then
   COMPILER_PREFIX="armv7a-linux-androideabi26"
   EXTRA_CFLAGS="-mfloat-abi=softfp -mfpu=vfp"
   EXTRA_LDFLAGS=""
-  if [ "$TARGET_VERSION" -ge 17 ]; then
-    EXTRA_CFLAGS+=" -DARM"
-  fi
 elif [ "$TARGET_ARCH" == "aarch64" ]; then
   echo "Setting up for aarch64 (64-bit ARM)..."
   TARGET_OPENJDK="aarch64-linux-androideabi"
@@ -76,17 +72,19 @@ ar cru dummy_libs/libpthread.a
 ar cru dummy_libs/librt.a
 ar cru dummy_libs/libthread_db.a
 
-export CFLAGS_BASE="-fPIC -O3 -D__ANDROID__ -DHEADLESS=1 ${EXTRA_CFLAGS}"
-export LDFLAGS_BASE="-L`pwd`/dummy_libs -Wl,--undefined-version ${EXTRA_LDFLAGS}"
-
 # ====================================================================================
-#  2. GET SOURCE, PATCH, AND CONFIGURE BASED ON VERSION
+#  2. GET SOURCE, PATCH, AND CONFIGURE
 # ====================================================================================
 
 bash get_source.sh $TARGET_VERSION
 cd openjdk
 git reset --hard
 
+# --- Base CFLAGS/LDFLAGS for all versions ---
+export CFLAGS_BASE="-fPIC -O3 -D__ANDROID__ -DHEADLESS=1 ${EXTRA_CFLAGS}"
+export LDFLAGS_BASE="-L`pwd`/../dummy_libs -Wl,--undefined-version ${EXTRA_LDFLAGS}"
+
+# ------------------------- JAVA 8 -------------------------
 if [ "$TARGET_VERSION" == "8" ]; then
   echo "--- Applying Java 8 Patches ---"
   git apply --reject --whitespace=fix ../patches/Jre_8/jdk8u_android.diff || true
@@ -97,6 +95,7 @@ if [ "$TARGET_VERSION" == "8" ]; then
   fi
 
   echo "--- Configuring Java 8 ---"
+  # Java 8 needs explicit flags to find everything
   run_with_spinner bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
@@ -107,7 +106,6 @@ if [ "$TARGET_VERSION" == "8" ]; then
     --with-extra-cxxflags="$CFLAGS_BASE" \
     --with-extra-ldflags="$LDFLAGS_BASE" \
     --with-debug-level=release \
-    --disable-precompiled-headers \
     --x-includes=/usr/include/X11 \
     --x-libraries=/usr/lib/`uname -m`-linux-gnu \
     --with-cups-include=/usr/include \
@@ -116,22 +114,24 @@ if [ "$TARGET_VERSION" == "8" ]; then
     --with-freetype-lib=/usr/lib/`uname -m`-linux-gnu \
     --with-alsa=/usr/include/alsa
 
+# ------------------------- JAVA 17 -------------------------
 elif [ "$TARGET_VERSION" == "17" ]; then
   echo "--- Applying Java 17 Patches ---"
   find ../patches/Jre_17 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
 
   echo "--- Configuring Java 17 ---"
+  # DEFINITIVE FIX for dlvsym redefinition
+  export CFLAGS_V17="${CFLAGS_BASE} -D_LIBCPP_HAS_NO_DLFCN_H"
   run_with_spinner bash ./configure \
     --openjdk-target=$TARGET_OPENJDK \
     --with-jvm-variants=server \
     --with-boot-jdk=$JAVA_HOME \
     --with-toolchain-type=clang \
     --with-sysroot=$SYSROOT_PATH \
-    --with-extra-cflags="$CFLAGS_BASE" \
-    --with-extra-cxxflags="$CFLAGS_BASE" \
+    --with-extra-cflags="$CFLAGS_V17" \
+    --with-extra-cxxflags="$CFLAGS_V17" \
     --with-extra-ldflags="$LDFLAGS_BASE" \
     --with-debug-level=release \
-    --disable-precompiled-headers \
     --disable-warnings-as-errors \
     --x-includes=/usr/include/X11 \
     --x-libraries=/usr/lib/`uname -m`-linux-gnu \
@@ -140,6 +140,7 @@ elif [ "$TARGET_VERSION" == "17" ]; then
     --with-freetype-include=/usr/include/freetype2 \
     --with-freetype-lib=/usr/lib/`uname -m`-linux-gnu
 
+# ------------------------- JAVA 21 -------------------------
 elif [ "$TARGET_VERSION" == "21" ]; then
   echo "--- Applying Java 21 Patches ---"
   find ../patches/Jre_21 -name "*.diff" -print0 | xargs -0 -I {} sh -c 'echo "Applying {}" && git apply --reject --whitespace=fix {} || true'
@@ -155,7 +156,7 @@ elif [ "$TARGET_VERSION" == "21" ]; then
     --with-extra-cxxflags="$CFLAGS_BASE" \
     --with-extra-ldflags="$LDFLAGS_BASE" \
     --with-debug-level=release \
-    --disable-precompiled-headers \
+    --with-native-debug-symbols=none \
     --disable-warnings-as-errors \
     --x-includes=/usr/include/X11 \
     --x-libraries=/usr/lib/`uname -m`-linux-gnu \
@@ -169,13 +170,10 @@ fi
 #  3. COMPILE AND REPACK
 # ====================================================================================
 
-run_with_spinner make images || {
-  echo "Build failed after retrying once, showing last 50 lines:"
-  tail -n 50 "$LOGFILE"
-  exit 1
-}
+echo "--- Compiling ---"
+run_with_spinner make images
 
-echo "Build complete. Now repacking JRE..."
+echo "--- Repacking JRE ---"
 BUILD_DIR_ARCH=$(echo "$TARGET_OPENJDK" | sed 's/-androideabi//')
 cd build/linux-${BUILD_DIR_ARCH}-release/images
 FULL_JRE_DIR=$(find . -type d -name "jre*" | head -n 1)
