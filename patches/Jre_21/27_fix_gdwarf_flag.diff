@@ -1,0 +1,11 @@
+--- a/make/common/NativeCompilation.gmk
++++ b/make/common/NativeCompilation.gmk
+@@ -231,7 +231,7 @@
+ # DWARF version can be specified per-platform, e.g. -gdwarf-4.
+ # When building with gcc-4.8 on Solaris 10, -gdwarf-2 is needed.
+ ifneq ($(DEBUG_SYMBOLS_LEVEL), none)
+-  DEBUG_SYMBOLS_CFLAGS:=-gdwarf-$(DEBUG_SYMBOLS_G_LEVEL)
++  DEBUG_SYMBOLS_CFLAGS:=-gdwarf
+ endif
+ 
+ ################################################################################
