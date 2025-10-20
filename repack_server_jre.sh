@@ -1,59 +1,24 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# This script takes a full JRE and repacks it to include only the
-# components necessary for running a headless Minecraft server.
+JAVA_VERSION=$1
+FULL_JRE_DIR=$2
+REPACKED_DIR=$3
 
-TARGET_VERSION=$1
-SOURCE_JRE_PATH=$2
-DEST_JRE_PATH=$3
+rm -rf "$REPACKED_DIR"
+cp -a "$FULL_JRE_DIR" "$REPACKED_DIR"
+cd "$REPACKED_DIR"
 
-echo "Repacking JRE for Java $TARGET_VERSION..."
-echo "Source: $SOURCE_JRE_PATH"
-echo "Destination: $DEST_JRE_PATH"
+find . -type f \( -perm -u+x -o -name "*.so" -o -name "*.so.*" \) -exec file {} \; | grep ELF | cut -d: -f1 | while read -r bin; do
+  strip --strip-unneeded "$bin" || true
+done
 
-if [ -d "$DEST_JRE_PATH" ]; then
-    rm -rf "$DEST_JRE_PATH"
-fi
+rm -rf demo sample man docs include lib/missioncontrol lib/visualvm lib/javafx
+find lib -name "*.a" -type f -delete
+find lib -name "*.diz" -type f -delete
+find . -type f \( -name "*.pdb" -o -name "*.exe" -o -name "*.dll" -o -name "*.lib" \) -delete
+rm -rf src.zip
+rm -rf lib/javafx*
+rm -rf share/man
 
-if [ "$TARGET_VERSION" == "8" ]; then
-    # For Java 8, we copy the whole JRE and then remove unneeded parts.
-    echo "Using delete-list strategy for Java 8..."
-    cp -r "$SOURCE_JRE_PATH" "$DEST_JRE_PATH"
-
-    # Remove documentation, headers, and debug symbols
-    rm -rf "$DEST_JRE_PATH/man" \
-           "$DEST_JRE_PATH/include" \
-           "$DEST_JRE_PATH/lib/missioncontrol" \
-           "$DEST_JRE_PATH/lib/visualvm"
-
-    # Remove source code zip
-    find "$DEST_JRE_PATH" -name "src.zip" -delete
-
-    echo "Java 8 JRE repacked."
-
-elif [ "$TARGET_VERSION" -ge 17 ]; then
-    # For modern Java, we use jlink to build a new, minimal JRE.
-    echo "Using jlink strategy for Java $TARGET_VERSION..."
-
-    # Define the modules a Minecraft server needs. This includes 'java.desktop'
-    # because many servers and plugins still use AWT classes for image processing,
-    # which works in headless mode.
-    MODULES_TO_INCLUDE="java.base,java.logging,java.sql,java.naming,java.desktop,jdk.unsupported"
-
-    # Find the jlink executable from the Boot JDK we used to build everything
-    JLINK_EXEC="$JAVA_HOME/bin/jlink"
-
-    "$JLINK_EXEC" \
-        --module-path "$SOURCE_JRE_PATH/jmods" \
-        --add-modules "$MODULES_TO_INCLUDE" \
-        --output "$DEST_JRE_PATH" \
-        --strip-debug \
-        --no-man-pages \
-        --no-header-files \
-        --compress=2
-
-    echo "Java $TARGET_VERSION JRE repacked with jlink."
-fi
-
-echo "Repacking complete."
+chmod -R u+rwX,go+rX,go-w .
